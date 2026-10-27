@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cashew Container Calculator</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f2;
+    --card: #ffffff;
+    --text: #1c1c1a;
+    --muted: #66665f;
+    --border: #d9d9d2;
+    --accent: #2f5d50;
+    --on-accent: #ffffff;
+    --warn-bg: #fff4d6;
+    --warn-text: #6e4b00;
+    --err-bg: #fdecea;
+    --err-text: #9f2a1e;
+    --pos: #1d7a3d;
+    --neg: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151514;
+      --card: #1f1f1d;
+      --text: #ebebe7;
+      --muted: #a2a29a;
+      --border: #383834;
+      --accent: #86bfaa;
+      --on-accent: #0f1f19;
+      --warn-bg: #3a2f12;
+      --warn-text: #f1d184;
+      --err-bg: #3e1b18;
+      --err-text: #f3a59d;
+      --pos: #74d295;
+      --neg: #f28b82;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  h3 { font-size: 14px; margin: 0 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--text);
+    font: inherit;
+  }
+  input[readonly] { background: var(--bg); color: var(--muted); cursor: not-allowed; }
+  input.bad { border-color: var(--neg); color: var(--neg); }
+  .inline { display: flex; gap: 8px; }
+  .inline input { flex: 1 1 auto; min-width: 0; }
+  .inline select { width: auto; flex: 0 0 auto; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .tablewrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  #gradeTable { min-width: 600px; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  th.num, td.num { text-align: right; }
+  #gradeTable td:nth-child(1) { width: 130px; }
+  #gradeTable td:nth-child(3), #gradeTable td:nth-child(4) { width: 130px; }
+  #gradeTable td:nth-child(5) { width: 90px; }
+  #gradeTable td.num input { text-align: right; }
+  tfoot td { font-weight: 600; border-bottom: none; }
+  button {
+    font: inherit;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--on-accent);
+    cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--text); border-color: var(--border); padding: 6px 10px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .actions { margin-top: 12px; }
+  .msg { padding: 8px 12px; border-radius: 6px; margin-top: 10px; font-size: 14px; }
+  .msg.warn { background: var(--warn-bg); color: var(--warn-text); }
+  .msg.err { background: var(--err-bg); color: var(--err-text); }
+  .hidden { display: none; }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .block { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-variant-numeric: tabular-nums; }
+  dt { color: var(--muted); }
+  dd { margin: 0; text-align: right; }
+  dt.total, dd.total { border-top: 1px solid var(--border); padding-top: 6px; font-weight: 600; color: var(--text); }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+  .summary { margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cashew Container Calculator</h1>
+  <p class="sub">Estimate the raw cashew needed, input cost and output value for a target output quantity.</p>
+
+  <section>
+    <h2>1. Final output quantity</h2>
+    <div class="grid">
+      <div>
+        <label for="outQty">Quantity to ship, e.g. container load (wholes + broken)</label>
+        <div class="inline">
+          <input id="outQty" type="number" min="0" step="any" value="20000">
+          <select id="outUnit" aria-label="Quantity unit">
+            <option value="kg">kg</option>
+            <option value="t">tonne</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <p class="hint">Rows marked Rejection in the output table are produced but not counted in this quantity.</p>
+  </section>
+
+  <section>
+    <h2>2. Input cost</h2>
+    <div class="grid">
+      <div>
+        <label for="rcnPrice">Raw cashew price (₹ per kg)</label>
+        <input id="rcnPrice" type="number" min="0" step="any" value="180">
+      </div>
+      <div>
+        <label for="outturn">Outturn (white kernel from raw cashew)</label>
+        <div class="inline">
+          <input id="outturn" type="number" min="0" step="any" value="25">
+          <select id="outturnUnit" aria-label="Outturn unit">
+            <option value="pct">%</option>
+            <option value="g">g per kg</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Processing cost</h2>
+    <div class="grid">
+      <div>
+        <label for="procCost">Processing cost (₹)</label>
+        <div class="inline">
+          <input id="procCost" type="number" min="0" step="any" value="0">
+          <select id="procUnit" aria-label="Processing cost basis">
+            <option value="rcn">per kg raw cashew</option>
+            <option value="kernel">per kg kernel produced</option>
+            <option value="total">total (lump sum)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. Output grades</h2>
+    <div class="tablewrap">
+      <table id="gradeTable">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Grade name</th>
+            <th class="num">Price (₹ per kg)</th>
+            <th class="num">% of production</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rowsBody"></tbody>
+      </table>
+    </div>
+    <datalist id="grades"></datalist>
+    <div class="actions"><button id="addRow" type="button">Add row</button></div>
+    <div id="rowsMsg" class="msg hidden"></div>
+    <p class="hint">The last row always takes the remaining percentage so that the table adds up to 100%.</p>
+  </section>
+
+  <section>
+    <h2>5. Prediction</h2>
+    <div id="calcErr" class="msg err hidden"></div>
+
+    <div class="results">
+      <div class="block">
+        <h3>Input</h3>
+        <dl>
+          <dt>Raw cashew required</dt><dd id="rQ">—</dd>
+          <dt>Raw cashew cost</dt><dd id="rRcnCost">—</dd>
+          <dt>Processing cost</dt><dd id="rProc">—</dd>
+          <dt class="total">Total input cost</dt><dd id="rIn" class="total">—</dd>
+        </dl>
+      </div>
+      <div class="block">
+        <h3>Output</h3>
+        <dl>
+          <dt>Total kernel produced</dt><dd id="rK">—</dd>
+          <dt>Shipped quantity</dt><dd id="rShip">—</dd>
+          <dt>Rejection quantity</dt><dd id="rRej">—</dd>
+          <dt class="total">Total output value</dt><dd id="rOut" class="total">—</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="block summary">
+      <h3>Summary</h3>
+      <dl>
+        <dt>Profit / loss (before tax)</dt><dd id="rProfit">—</dd>
+        <dt>Profit as % of output value</dt><dd id="rMargin">—</dd>
+        <dt>Input cost per kg shipped</dt><dd id="rCostKg">—</dd>
+        <dt>Average realisation per kg shipped</dt><dd id="rRealKg">—</dd>
+        <dt>Break-even outturn</dt><dd id="rBeY">—</dd>
+        <dt>Break-even raw cashew price</dt><dd id="rBeP">—</dd>
+      </dl>
+    </div>
+
+    <h3>Grade-wise output</h3>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Grade</th>
+            <th>Type</th>
+            <th class="num">%</th>
+            <th class="num">Quantity (kg)</th>
+            <th class="num">Price (₹ per kg)</th>
+            <th class="num">Value (₹)</th>
+          </tr>
+        </thead>
+        <tbody id="breakBody"></tbody>
+        <tfoot id="breakFoot"></tfoot>
+      </table>
+    </div>
+    <p class="hint">Freight, taxes and by-product income (shell, CNSL, testa) are not included unless you enter them as processing cost or as a priced row.</p>
+  </section>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var TYPES = ['Wholes', 'Broken', 'Rejection'];
+  var GRADES = ['W180', 'W210', 'W240', 'W320', 'W450', 'SW', 'SSW', 'DW', 'JH', 'B', 'S', 'LWP', 'SWP', 'BB', 'SP', 'Reject'];
+
+  var rows = [
+    { type: 'Wholes', grade: 'W320', price: 850, pct: 85 },
+    { type: 'Broken', grade: 'SWP', price: 550, pct: 10 },
+    { type: 'Rejection', grade: 'Reject', price: 0, pct: 0 }
+  ];
+
+  GRADES.forEach(function (g) {
+    var o = document.createElement('option');
+    o.value = g;
+    $('grades').appendChild(o);
+  });
+
+  function val(id) {
+    var v = parseFloat($(id).value);
+    return Number.isFinite(v) ? v : NaN;
+  }
+  function fmtNum(n, d) {
+    d = d || 0;
+    return n.toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function plain(x) { return String(Math.round(x * 10000) / 10000); }
+  function pctStr(p) { return fmtNum(p, 2).replace(/\.?0+$/, '') + '%'; }
+  function money(n) {
+    var sign = n < 0 ? '−' : '';
+    var a = Math.abs(n);
+    var s = sign + '₹' + fmtNum(Math.round(a));
+    if (a >= 1e7) s += ' (' + sign + '₹' + (a / 1e7).toFixed(2) + ' crore)';
+    else if (a >= 1e5) s += ' (' + sign + '₹' + (a / 1e5).toFixed(2) + ' lakh)';
+    return s;
+  }
+  function perKg(n) { return '₹' + fmtNum(n, 2) + ' per kg'; }
+  function qty(kg) { return fmtNum(Math.round(kg)) + ' kg (' + fmtNum(kg / 1000, 2) + ' t)'; }
+
+  function showMsg(el, kind, text) {
+    el.className = 'msg ' + kind;
+    el.textContent = text;
+  }
+  function hideMsg(el) {
+    el.className = 'msg hidden';
+    el.textContent = '';
+  }
+
+  // Percentages for every row; the last row balances to 100%.
+  function computePcts() {
+    var n = rows.length;
+    if (n === 1) return [100];
+    var out = [];
+    var sum = 0;
+    for (var i = 0; i < n - 1; i++) {
+      var p = Number.isFinite(rows[i].pct) ? rows[i].pct : 0;
+      out.push(p);
+      sum += p;
+    }
+    out.push(Math.round((100 - sum) * 1e6) / 1e6);
+    return out;
+  }
+
+  function renderRows() {
+    var tb = $('rowsBody');
+    tb.textContent = '';
+    rows.forEach(function (r, i) {
+      var last = i === rows.length - 1;
+      var tr = document.createElement('tr');
+
+      var sel = document.createElement('select');
+      sel.setAttribute('aria-label', 'Type');
+      TYPES.forEach(function (t) {
+        var o = document.createElement('option');
+        o.value = t;
+        o.textContent = t;
+        sel.appendChild(o);
+      });
+      sel.value = r.type;
+      sel.addEventListener('change', function () { r.type = sel.value; update(); });
+
+      var grade = document.createElement('input');
+      grade.type = 'text';
+      grade.setAttribute('list', 'grades');
+      grade.setAttribute('aria-label', 'Grade name');
+      grade.placeholder = 'e.g. W320';
+      grade.value = r.grade;
+      grade.addEventListener('input', function () { r.grade = grade.value; update(); });
+
+      var price = document.createElement('input');
+      price.type = 'number';
+      price.min = '0';
+      price.step = 'any';
+      price.setAttribute('aria-label', 'Price per kg');
+      price.value = r.price;
+      price.addEventListener('input', function () { r.price = parseFloat(price.value); update(); });
+
+      var pct = document.createElement('input');
+      pct.type = 'number';
+      pct.min = '0';
+      pct.max = '100';
+      pct.step = 'any';
+      pct.className = 'pct';
+      pct.setAttribute('aria-label', 'Percentage of production');
+      if (last) {
+        pct.readOnly = true;
+        pct.tabIndex = -1;
+        pct.title = rows.length === 1
+          ? 'Fixed at 100%. Add a new row to change it.'
+          : 'Balances automatically to make the total 100%.';
+      } else {
+        pct.value = r.pct;
+        pct.addEventListener('input', function () { r.pct = parseFloat(pct.value); update(); });
+      }
+
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'ghost';
+      del.textContent = 'Remove';
+      del.disabled = rows.length === 1;
+      del.addEventListener('click', function () {
+        rows.splice(i, 1);
+        renderRows();
+        update();
+      });
+
+      [sel, grade, price, pct, del].forEach(function (el, k) {
+        var td = document.createElement('td');
+        if (k === 2 || k === 3) td.className = 'num';
+        td.appendChild(el);
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+  }
+
+  var RESULT_IDS = ['rQ', 'rRcnCost', 'rProc', 'rIn', 'rK', 'rShip', 'rRej', 'rOut',
+                    'rProfit', 'rMargin', 'rCostKg', 'rRealKg', 'rBeY', 'rBeP'];
+
+  function clearResults() {
+    RESULT_IDS.forEach(function (id) { $(id).textContent = '—'; $(id).className = ''; });
+    $('rIn').className = 'total';
+    $('rOut').className = 'total';
+    $('breakBody').textContent = '';
+    $('breakFoot').textContent = '';
+  }
+
+  function cell(tr, text, num) {
+    var td = document.createElement('td');
+    if (num) td.className = 'num';
+    td.textContent = text;
+    tr.appendChild(td);
+  }
+
+  function update() {
+    var n = rows.length;
+    var pcts = computePcts();
+
+    var lastPct = $('rowsBody').querySelector('tr:last-child input.pct');
+    if (lastPct) {
+      lastPct.value = plain(pcts[n - 1]);
+      lastPct.classList.toggle('bad', pcts[n - 1] < 0);
+    }
+
+    // Validate the grade rows
+    var rowErrors = [];
+    if (pcts.slice(0, -1).some(function (p) { return p < 0; })) {
+      rowErrors.push('Percentages cannot be negative.');
+    } else if (pcts[n - 1] < 0) {
+      rowErrors.push('The rows above the last one add up to ' + pctStr(100 - pcts[n - 1]) +
+        ', which is more than 100%. Reduce them so the last row is not negative.');
+    }
+    if (rows.some(function (r) { return Number.isFinite(r.price) && r.price < 0; })) {
+      rowErrors.push('Prices cannot be negative.');
+    }
+    var rejPct = 0;
+    rows.forEach(function (r, i) { if (r.type === 'Rejection') rejPct += pcts[i]; });
+    if (rowErrors.length === 0 && rejPct >= 100) {
+      rowErrors.push('Rejection rows take 100% of production, so nothing is left to ship. Add a Wholes or Broken row.');
+    }
+
+    var rowsMsg = $('rowsMsg');
+    if (rowErrors.length) showMsg(rowsMsg, 'err', rowErrors.join(' '));
+    else if (n === 1) showMsg(rowsMsg, 'warn', 'There is only one row, so it is fixed at 100%. Add a new row to change the percentage.');
+    else hideMsg(rowsMsg);
+
+    // Validate the other inputs
+    var errors = [];
+    var C = val('outQty');
+    if ($('outUnit').value === 't') C *= 1000;
+    if (!(C > 0)) errors.push('Enter a final output quantity greater than zero.');
+
+    var P = val('rcnPrice');
+    if (!(P >= 0)) errors.push('Enter the raw cashew price.');
+
+    var y = val('outturn');
+    y = $('outturnUnit').value === 'g' ? y / 1000 : y / 100;
+    if (!(y > 0 && y <= 1)) errors.push('Enter an outturn above 0 and at most 100% (1000 g per kg).');
+
+    var p = val('procCost');
+    if (!Number.isFinite(p)) p = 0;
+    if (p < 0) errors.push('Processing cost cannot be negative.');
+
+    var calcErr = $('calcErr');
+    if (errors.length || rowErrors.length) {
+      showMsg(calcErr, 'err', errors.length ? errors.join(' ') : 'Fix the output grade rows above to see the prediction.');
+      clearResults();
+      return;
+    }
+    hideMsg(calcErr);
+
+    // Calculation
+    var unit = $('procUnit').value;
+    var pR = unit === 'rcn' ? p : 0;      // per kg raw cashew
+    var pK = unit === 'kernel' ? p : 0;   // per kg kernel produced
+    var lump = unit === 'total' ? p : 0;  // lump sum
+
+    var K = C / (1 - rejPct / 100);       // total kernel produced
+    var Q = K / y;                        // raw cashew required
+    var rcnCost = Q * P;
+    var proc = Q * pR + K * pK + lump;
+    var inTotal = rcnCost + proc;
+
+    var outValue = 0;
+    var rejQty = 0;
+    var lines = rows.map(function (r, i) {
+      var q = K * pcts[i] / 100;
+      var price = Number.isFinite(r.price) ? r.price : 0;
+      var v = q * price;
+      outValue += v;
+      if (r.type === 'Rejection') rejQty += q;
+      return { r: r, pct: pcts[i], q: q, price: price, v: v };
+    });
+    var profit = outValue - inTotal;
+
+    // Input and output blocks
+    $('rQ').textContent = qty(Q);
+    $('rRcnCost').textContent = money(rcnCost);
+    $('rProc').textContent = money(proc);
+    $('rIn').textContent = money(inTotal);
+    $('rK').textContent = qty(K);
+    $('rShip').textContent = qty(C);
+    $('rRej').textContent = qty(rejQty);
+    $('rOut').textContent = money(outValue);
+
+    // Summary
+    $('rProfit').textContent = money(profit);
+    $('rProfit').className = profit >= 0 ? 'pos' : 'neg';
+    $('rMargin').textContent = outValue > 0 ? fmtNum(profit / outValue * 100, 2) + '%' : '—';
+    $('rMargin').className = profit >= 0 ? 'pos' : 'neg';
+    $('rCostKg').textContent = perKg(inTotal / C);
+    $('rRealKg').textContent = perKg(outValue / C);
+
+    var net = outValue - K * pK - lump;   // value left to pay for raw cashew and per-kg-RCN processing
+    var beY = net > 0 ? K * (P + pR) / net : NaN;
+    $('rBeY').textContent = (net > 0 && beY <= 1)
+      ? fmtNum(beY * 100, 2) + '% (' + fmtNum(beY * 1000, 0) + ' g per kg)'
+      : 'Not reachable';
+    var beP = net / Q - pR;
+    $('rBeP').textContent = beP > 0 ? perKg(beP) : 'Not reachable';
+
+    // Grade-wise table
+    var body = $('breakBody');
+    body.textContent = '';
+    lines.forEach(function (l) {
+      var tr = document.createElement('tr');
+      cell(tr, l.r.grade.trim() || '(unnamed)');
+      cell(tr, l.r.type);
+      cell(tr, pctStr(l.pct), true);
+      cell(tr, fmtNum(l.q, 2), true);
+      cell(tr, fmtNum(l.price, 2), true);
+      cell(tr, fmtNum(Math.round(l.v)), true);
+      body.appendChild(tr);
+    });
+    var foot = $('breakFoot');
+    foot.textContent = '';
+    var tr = document.createElement('tr');
+    cell(tr, 'Total');
+    cell(tr, '');
+    cell(tr, '100%', true);
+    cell(tr, fmtNum(K, 2), true);
+    cell(tr, '', true);
+    cell(tr, fmtNum(Math.round(outValue)), true);
+    foot.appendChild(tr);
+  }
+
+  $('addRow').addEventListener('click', function () {
+    var pcts = computePcts();
+    var lastIdx = rows.length - 1;
+    // The current last row becomes editable and keeps its balanced value.
+    rows[lastIdx].pct = Math.max(0, Math.round(pcts[lastIdx] * 10000) / 10000);
+    rows.push({ type: 'Wholes', grade: '', price: 0, pct: 0 });
+    renderRows();
+    update();
+    var trs = $('rowsBody').querySelectorAll('tr');
+    trs[trs.length - 1].querySelector('input').focus();
+  });
+
+  ['outQty', 'rcnPrice', 'outturn', 'procCost'].forEach(function (id) {
+    $(id).addEventListener('input', update);
+  });
+  $('procUnit').addEventListener('change', update);
+
+  // Convert the entered value when a unit is switched
+  var prevOutUnit = $('outUnit').value;
+  $('outUnit').addEventListener('change', function () {
+    var u = $('outUnit').value;
+    var v = val('outQty');
+    if (Number.isFinite(v) && u !== prevOutUnit) $('outQty').value = plain(u === 't' ? v / 1000 : v * 1000);
+    prevOutUnit = u;
+    update();
+  });
+  var prevOtUnit = $('outturnUnit').value;
+  $('outturnUnit').addEventListener('change', function () {
+    var u = $('outturnUnit').value;
+    var v = val('outturn');
+    if (Number.isFinite(v) && u !== prevOtUnit) $('outturn').value = plain(u === 'g' ? v * 10 : v / 10);
+    prevOtUnit = u;
+    update();
+  });
+
+  renderRows();
+  update();
+})();
+</script>
+</body>
+</html>
