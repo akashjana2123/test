@@ -110,6 +110,14 @@
   .pos { color: var(--pos); }
   .neg { color: var(--neg); }
   .summary { margin-bottom: 16px; }
+  .taxblock { margin-bottom: 16px; }
+  #splitTable { min-width: 460px; margin-top: 12px; }
+  #splitTable td:nth-child(2) { width: 160px; }
+  #splitTable td.num input { text-align: right; }
+  #taxTable { min-width: 640px; }
+  .headrow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+  label.check { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; margin: 0 0 8px; cursor: pointer; }
+  label.check input { width: auto; margin: 0; }
 </style>
 </head>
 <body>
@@ -194,7 +202,54 @@
   </section>
 
   <section>
-    <h2>5. Prediction</h2>
+    <h2>5. Tax (GST)</h2>
+    <div class="grid">
+      <div>
+        <label for="gstRate">GST rate on cashew kernels (%)</label>
+        <input id="gstRate" type="number" min="0" step="any" value="5">
+      </div>
+      <div>
+        <label for="expMode">Export sales</label>
+        <select id="expMode">
+          <option value="lut">Under LUT / bond (0% IGST)</option>
+          <option value="igst">With IGST payment (refund claimed)</option>
+        </select>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table id="splitTable">
+        <thead>
+          <tr>
+            <th>Sale type</th>
+            <th class="num">% of sales value</th>
+            <th>Tax applied</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Within state</td>
+            <td class="num"><input id="shareIn" type="number" min="0" max="100" step="any" value="20" aria-label="Within state share"></td>
+            <td id="taxInLbl"></td>
+          </tr>
+          <tr>
+            <td>Out of state</td>
+            <td class="num"><input id="shareOut" type="number" min="0" max="100" step="any" value="30" aria-label="Out of state share"></td>
+            <td id="taxOutLbl"></td>
+          </tr>
+          <tr>
+            <td>Out of country (export)</td>
+            <td class="num"><input id="shareExp" type="number" readonly tabindex="-1" title="Balances automatically to make the total 100%." aria-label="Export share"></td>
+            <td id="taxExpLbl"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="taxMsg" class="msg hidden"></div>
+    <p class="hint">The export share balances automatically. GST is collected from buyers and paid to the government, so profit figures use the taxable value. Input tax credit on purchases is not deducted here.</p>
+  </section>
+
+  <section>
+    <h2>6. Prediction</h2>
     <div id="calcErr" class="msg err hidden"></div>
 
     <div class="results">
@@ -213,16 +268,43 @@
           <dt>Total kernel produced</dt><dd id="rK">—</dd>
           <dt>Shipped quantity</dt><dd id="rShip">—</dd>
           <dt>Rejection quantity</dt><dd id="rRej">—</dd>
-          <dt class="total">Total output value</dt><dd id="rOut" class="total">—</dd>
+          <dt class="total">Total output value (taxable)</dt><dd id="rOut" class="total">—</dd>
         </dl>
+      </div>
+    </div>
+
+    <div class="block taxblock">
+      <h3>Tax breakdown by sale type</h3>
+      <div class="tablewrap">
+        <table id="taxTable">
+          <thead>
+            <tr>
+              <th>Sale type</th>
+              <th class="num">Share</th>
+              <th class="num">Taxable value (₹)</th>
+              <th class="num">CGST (₹)</th>
+              <th class="num">SGST (₹)</th>
+              <th class="num">IGST (₹)</th>
+              <th class="num">Total amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="taxBody"></tbody>
+          <tfoot id="taxFoot"></tfoot>
+        </table>
       </div>
     </div>
 
     <div class="block summary">
       <h3>Summary</h3>
       <dl>
-        <dt>Profit / loss (before tax)</dt><dd id="rProfit">—</dd>
-        <dt>Profit as % of output value</dt><dd id="rMargin">—</dd>
+        <dt>Total output value (taxable)</dt><dd id="rSumTaxable">—</dd>
+        <dt>CGST</dt><dd id="rSumCgst">—</dd>
+        <dt>SGST</dt><dd id="rSumSgst">—</dd>
+        <dt>IGST</dt><dd id="rSumIgst">—</dd>
+        <dt>Total GST (effective rate)</dt><dd id="rSumTax">—</dd>
+        <dt class="total">Total invoice value (incl. GST)</dt><dd id="rSumInv" class="total">—</dd>
+        <dt class="total">Profit / loss (on taxable value)</dt><dd id="rProfit" class="total">—</dd>
+        <dt>Profit as % of taxable output value</dt><dd id="rMargin">—</dd>
         <dt>Input cost per kg shipped</dt><dd id="rCostKg">—</dd>
         <dt>Average realisation per kg shipped</dt><dd id="rRealKg">—</dd>
         <dt>Break-even outturn</dt><dd id="rBeY">—</dd>
@@ -230,7 +312,10 @@
       </dl>
     </div>
 
-    <h3>Grade-wise output</h3>
+    <div class="headrow">
+      <h3>Grade-wise output</h3>
+      <label class="check"><input type="checkbox" id="inclTax"> Show amounts including GST</label>
+    </div>
     <div class="tablewrap">
       <table>
         <thead>
@@ -239,15 +324,15 @@
             <th>Type</th>
             <th class="num">%</th>
             <th class="num">Quantity (kg)</th>
-            <th class="num">Price (₹ per kg)</th>
-            <th class="num">Value (₹)</th>
+            <th class="num" id="thPrice">Price (₹ per kg)</th>
+            <th class="num" id="thValue">Taxable value (₹)</th>
           </tr>
         </thead>
         <tbody id="breakBody"></tbody>
         <tfoot id="breakFoot"></tfoot>
       </table>
     </div>
-    <p class="hint">Freight, taxes and by-product income (shell, CNSL, testa) are not included unless you enter them as processing cost or as a priced row.</p>
+    <p class="hint">With GST included, every grade carries the overall effective GST rate of your sales split. Freight, income tax and by-product income (shell, CNSL, testa) are not included unless you enter them as processing cost or as a priced row.</p>
   </section>
 </main>
 
@@ -388,14 +473,18 @@
   }
 
   var RESULT_IDS = ['rQ', 'rRcnCost', 'rProc', 'rIn', 'rK', 'rShip', 'rRej', 'rOut',
+                    'rSumTaxable', 'rSumCgst', 'rSumSgst', 'rSumIgst', 'rSumTax', 'rSumInv',
                     'rProfit', 'rMargin', 'rCostKg', 'rRealKg', 'rBeY', 'rBeP'];
+  var DEFAULT_CLASS = {};
+  RESULT_IDS.forEach(function (id) { DEFAULT_CLASS[id] = $(id).className; });
+
+  function setSign(id, n) {
+    $(id).className = (DEFAULT_CLASS[id] ? DEFAULT_CLASS[id] + ' ' : '') + (n >= 0 ? 'pos' : 'neg');
+  }
 
   function clearResults() {
-    RESULT_IDS.forEach(function (id) { $(id).textContent = '—'; $(id).className = ''; });
-    $('rIn').className = 'total';
-    $('rOut').className = 'total';
-    $('breakBody').textContent = '';
-    $('breakFoot').textContent = '';
+    RESULT_IDS.forEach(function (id) { $(id).textContent = '—'; $(id).className = DEFAULT_CLASS[id]; });
+    ['breakBody', 'breakFoot', 'taxBody', 'taxFoot'].forEach(function (id) { $(id).textContent = ''; });
   }
 
   function cell(tr, text, num) {
@@ -454,9 +543,36 @@
     if (!Number.isFinite(p)) p = 0;
     if (p < 0) errors.push('Processing cost cannot be negative.');
 
+    // Tax inputs; the export share balances to 100%
+    var taxErrors = [];
+    var gst = val('gstRate');
+    var sIn = val('shareIn');
+    if (!Number.isFinite(sIn)) sIn = 0;
+    var sOut = val('shareOut');
+    if (!Number.isFinite(sOut)) sOut = 0;
+    var sExp = Math.round((100 - sIn - sOut) * 1e6) / 1e6;
+    var expMode = $('expMode').value;
+    $('shareExp').value = plain(sExp);
+    $('shareExp').classList.toggle('bad', sExp < 0);
+    var g = Number.isFinite(gst) ? gst : 0;
+    $('taxInLbl').textContent = 'CGST ' + pctStr(g / 2) + ' + SGST ' + pctStr(g / 2);
+    $('taxOutLbl').textContent = 'IGST ' + pctStr(g);
+    $('taxExpLbl').textContent = expMode === 'igst'
+      ? 'IGST ' + pctStr(g) + ' (refund claimed later)'
+      : 'IGST 0% (zero-rated under LUT)';
+    if (!(gst >= 0)) taxErrors.push('Enter a GST rate of 0% or more.');
+    if (sIn < 0 || sOut < 0) taxErrors.push('Sales shares cannot be negative.');
+    else if (sExp < 0) taxErrors.push('Within state and out of state shares add up to ' + pctStr(sIn + sOut) + ', which is more than 100%. Reduce them so the export share is not negative.');
+    var taxMsg = $('taxMsg');
+    if (taxErrors.length) showMsg(taxMsg, 'err', taxErrors.join(' '));
+    else hideMsg(taxMsg);
+
     var calcErr = $('calcErr');
-    if (errors.length || rowErrors.length) {
-      showMsg(calcErr, 'err', errors.length ? errors.join(' ') : 'Fix the output grade rows above to see the prediction.');
+    if (errors.length || rowErrors.length || taxErrors.length) {
+      var parts = errors.slice();
+      if (rowErrors.length) parts.push('Fix the output grade rows above to see the prediction.');
+      if (taxErrors.length) parts.push('Fix the tax section above to see the prediction.');
+      showMsg(calcErr, 'err', parts.join(' '));
       clearResults();
       return;
     }
@@ -496,11 +612,60 @@
     $('rRej').textContent = qty(rejQty);
     $('rOut').textContent = money(outValue);
 
+    // Tax on sales
+    var rate = gst / 100;
+    var vIn = outValue * sIn / 100;
+    var vOut = outValue * sOut / 100;
+    var vExp = outValue * sExp / 100;
+    var cgst = vIn * rate / 2;
+    var sgst = vIn * rate / 2;
+    var igstOut = vOut * rate;
+    var igstExp = expMode === 'igst' ? vExp * rate : 0;
+    var igst = igstOut + igstExp;
+    var taxTotal = cgst + sgst + igst;
+    var invoice = outValue + taxTotal;
+    var effRate = outValue > 0 ? taxTotal / outValue : 0;
+
+    var tBody = $('taxBody');
+    tBody.textContent = '';
+    [
+      ['Within state', sIn, vIn, cgst, sgst, 0],
+      ['Out of state', sOut, vOut, 0, 0, igstOut],
+      ['Out of country (export)', sExp, vExp, 0, 0, igstExp]
+    ].forEach(function (t) {
+      var tr = document.createElement('tr');
+      cell(tr, t[0]);
+      cell(tr, pctStr(t[1]), true);
+      cell(tr, fmtNum(Math.round(t[2])), true);
+      cell(tr, fmtNum(Math.round(t[3])), true);
+      cell(tr, fmtNum(Math.round(t[4])), true);
+      cell(tr, fmtNum(Math.round(t[5])), true);
+      cell(tr, fmtNum(Math.round(t[2] + t[3] + t[4] + t[5])), true);
+      tBody.appendChild(tr);
+    });
+    var tFoot = $('taxFoot');
+    tFoot.textContent = '';
+    var tf = document.createElement('tr');
+    cell(tf, 'Total');
+    cell(tf, '100%', true);
+    cell(tf, fmtNum(Math.round(outValue)), true);
+    cell(tf, fmtNum(Math.round(cgst)), true);
+    cell(tf, fmtNum(Math.round(sgst)), true);
+    cell(tf, fmtNum(Math.round(igst)), true);
+    cell(tf, fmtNum(Math.round(invoice)), true);
+    tFoot.appendChild(tf);
+
     // Summary
+    $('rSumTaxable').textContent = money(outValue);
+    $('rSumCgst').textContent = money(cgst);
+    $('rSumSgst').textContent = money(sgst);
+    $('rSumIgst').textContent = money(igst);
+    $('rSumTax').textContent = money(taxTotal) + ' (' + fmtNum(effRate * 100, 2) + '%)';
+    $('rSumInv').textContent = money(invoice);
     $('rProfit').textContent = money(profit);
-    $('rProfit').className = profit >= 0 ? 'pos' : 'neg';
+    setSign('rProfit', profit);
     $('rMargin').textContent = outValue > 0 ? fmtNum(profit / outValue * 100, 2) + '%' : '—';
-    $('rMargin').className = profit >= 0 ? 'pos' : 'neg';
+    setSign('rMargin', profit);
     $('rCostKg').textContent = perKg(inTotal / C);
     $('rRealKg').textContent = perKg(outValue / C);
 
@@ -512,7 +677,11 @@
     var beP = net / Q - pR;
     $('rBeP').textContent = beP > 0 ? perKg(beP) : 'Not reachable';
 
-    // Grade-wise table
+    // Grade-wise table (taxable value, or total amount including GST)
+    var incl = $('inclTax').checked;
+    var mult = incl ? 1 + effRate : 1;
+    $('thPrice').textContent = incl ? 'Price incl. GST (₹ per kg)' : 'Price (₹ per kg)';
+    $('thValue').textContent = incl ? 'Total amount (₹)' : 'Taxable value (₹)';
     var body = $('breakBody');
     body.textContent = '';
     lines.forEach(function (l) {
@@ -521,8 +690,8 @@
       cell(tr, l.r.type);
       cell(tr, pctStr(l.pct), true);
       cell(tr, fmtNum(l.q, 2), true);
-      cell(tr, fmtNum(l.price, 2), true);
-      cell(tr, fmtNum(Math.round(l.v)), true);
+      cell(tr, fmtNum(l.price * mult, 2), true);
+      cell(tr, fmtNum(Math.round(l.v * mult)), true);
       body.appendChild(tr);
     });
     var foot = $('breakFoot');
@@ -533,7 +702,7 @@
     cell(tr, '100%', true);
     cell(tr, fmtNum(K, 2), true);
     cell(tr, '', true);
-    cell(tr, fmtNum(Math.round(outValue)), true);
+    cell(tr, fmtNum(Math.round(incl ? invoice : outValue)), true);
     foot.appendChild(tr);
   }
 
@@ -549,10 +718,12 @@
     trs[trs.length - 1].querySelector('input').focus();
   });
 
-  ['outQty', 'rcnPrice', 'outturn', 'procCost'].forEach(function (id) {
+  ['outQty', 'rcnPrice', 'outturn', 'procCost', 'gstRate', 'shareIn', 'shareOut'].forEach(function (id) {
     $(id).addEventListener('input', update);
   });
-  $('procUnit').addEventListener('change', update);
+  ['procUnit', 'expMode', 'inclTax'].forEach(function (id) {
+    $(id).addEventListener('change', update);
+  });
 
   // Convert the entered value when a unit is switched
   var prevOutUnit = $('outUnit').value;
